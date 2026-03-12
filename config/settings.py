@@ -43,9 +43,14 @@ class Settings(BaseSettings):
         default=None,
         description="Tax system code for YooKassa receipts (1..6 per 54-FZ)"
     )
-    # Deprecated: explicit receipt fields are now derived from YOOKASSA_AUTOPAYMENTS_ENABLED
-    YOOKASSA_PAYMENT_MODE: str = Field(default="full_prepayment")
-    YOOKASSA_PAYMENT_SUBJECT: str = Field(default="service")
+    YOOKASSA_PAYMENT_MODE: Optional[str] = Field(
+        default=None,
+        description="Optional override for YooKassa receipt item payment_mode."
+    )
+    YOOKASSA_PAYMENT_SUBJECT: Optional[str] = Field(
+        default=None,
+        description="Optional override for YooKassa receipt item payment_subject."
+    )
     # Single toggle to enable recurring payments (saving cards, managing payment methods, auto-renew)
     YOOKASSA_AUTOPAYMENTS_ENABLED: bool = Field(default=False)
     YOOKASSA_AUTOPAYMENTS_REQUIRE_CARD_BINDING: bool = Field(
@@ -397,18 +402,21 @@ class Settings(BaseSettings):
             return f"{base.rstrip('/')}{self.platega_webhook_path}"
         return None
 
-    # Computed YooKassa receipt fields based on recurring toggle
+    # Effective YooKassa receipt fields.
+    # Explicit .env values win; otherwise keep sensible defaults derived from the recurring toggle.
     @computed_field
     @property
     def yk_receipt_payment_mode(self) -> str:
-        # If autopayments are enabled, use service; otherwise full prepayment
-        return "service" if self.YOOKASSA_AUTOPAYMENTS_ENABLED else "full_prepayment"
+        if self.YOOKASSA_PAYMENT_MODE:
+            return self.YOOKASSA_PAYMENT_MODE
+        return "full_payment" if self.YOOKASSA_AUTOPAYMENTS_ENABLED else "full_prepayment"
 
     @computed_field
     @property
     def yk_receipt_payment_subject(self) -> str:
-        # If autopayments are enabled, use full_payment; otherwise payment
-        return "full_payment" if self.YOOKASSA_AUTOPAYMENTS_ENABLED else "payment"
+        if self.YOOKASSA_PAYMENT_SUBJECT:
+            return self.YOOKASSA_PAYMENT_SUBJECT
+        return "service" if self.YOOKASSA_AUTOPAYMENTS_ENABLED else "payment"
 
     @computed_field
     @property
@@ -649,6 +657,15 @@ class Settings(BaseSettings):
     )
     @classmethod
     def validate_optional_int(cls, v):
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                return None
+        return v
+
+    @field_validator('YOOKASSA_PAYMENT_MODE', 'YOOKASSA_PAYMENT_SUBJECT', mode='before')
+    @classmethod
+    def normalize_optional_yookassa_receipt_fields(cls, v):
         if isinstance(v, str):
             v = v.strip()
             if not v:
