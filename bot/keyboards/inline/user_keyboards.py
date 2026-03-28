@@ -136,6 +136,13 @@ def get_payment_method_keyboard(months: int, price: float,
         return str(int(val)) if float(val).is_integer() else f"{val:g}"
     value_str = _format_value(months)
     mode_suffix = f":{sale_mode}"
+
+    PLATEGA_METHOD_LABELS: Dict[int, str] = {
+        2:  "💳 СБП (Platega)",
+        11: "🏦 Карта МИР (Platega)",
+        13: "₿ Крипто (Platega)",
+    }
+
     for method in settings.payment_methods_order:
         if method == "severpay" and getattr(settings, "SEVERPAY_ENABLED", False):
             builder.button(
@@ -147,10 +154,21 @@ def get_payment_method_keyboard(months: int, price: float,
                 text=_("pay_with_sbp_button"),
                 callback_data=f"pay_fk:{value_str}:{price}{mode_suffix}",
             )
+        elif method.startswith("platega_") and settings.PLATEGA_ENABLED:
+            try:
+                method_id = int(method.split("_", 1)[1])
+            except (ValueError, IndexError):
+                continue
+            label = PLATEGA_METHOD_LABELS.get(method_id, f"Platega ({method_id})")
+            builder.button(
+                text=label,
+                callback_data=f"pay_platega:{value_str}:{price}:{method_id}{mode_suffix}",
+            )
         elif method == "platega" and settings.PLATEGA_ENABLED:
+            # fallback: single button if somehow slug wasn't expanded
             builder.button(
                 text=_("pay_with_platega_button"),
-                callback_data=f"pay_platega:{value_str}:{price}{mode_suffix}",
+                callback_data=f"pay_platega:{value_str}:{price}:0{mode_suffix}",
             )
         elif method == "yookassa" and settings.YOOKASSA_ENABLED:
             builder.button(
